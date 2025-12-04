@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
-using Microsoft.VisualBasic;
 
 namespace Memorama
 {
@@ -18,6 +17,9 @@ namespace Memorama
         private const int cols = 6;
         private const int totalPairs = (rows * cols) / 2;
         private int bestTime = int.MaxValue;
+
+        private List<(string name, int time)> podium = new List<(string name, int time)>();
+        private const int podiumLimit = 3;
 
         public Memorama()
         {
@@ -153,11 +155,9 @@ namespace Memorama
 
             secondClicked = clicked;
 
-            // comparar
             if (firstClicked.Tag != null && secondClicked.Tag != null &&
                 firstClicked.Tag.ToString() == secondClicked.Tag.ToString())
             {
-                // pareja encontrada
                 firstClicked.Enabled = false;
                 secondClicked.Enabled = false;
                 matchesFound++;
@@ -173,7 +173,6 @@ namespace Memorama
             }
             else
             {
-                // mostrar un momento y ocultar
                 if (timer2 != null) timer2.Start();
             }
         }
@@ -226,9 +225,6 @@ namespace Memorama
                 {
                     nombre = "Jugador";
                 }
-                if (string.IsNullOrWhiteSpace(nombre)) nombre = "Anónimo";
-                lbxPodio.Items.Insert(0, $"{nombre} - Tiempo: {secondsElapsed}s");
-                bestTime = secondsElapsed;
             }
 
             // Reiniciar o crear nuevo juego

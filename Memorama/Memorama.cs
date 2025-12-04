@@ -25,50 +25,65 @@ namespace Memorama
         {
             InitializeComponent();
             ConfigureTimers();
-            InitializeGame();
-            this.Resize += (s, e) => LayoutCards(); // reajustar al cambiar tamaño
+
+            this.btnStart.Click += BtnStart_Click;
+            this.btnRestart.Click += BtnRestart_Click;
+
+            InitializeGame(startTimer: false);
+
+            UpdatePodioListBox();
+
+            this.Resize += (s, e) => LayoutCards();
+        }
+
+        private void BtnStart_Click(object sender, EventArgs e)
+        {
+            InitializeGame(startTimer: true);
+            btnStart.Enabled = false;
+            btnRestart.Enabled = true;
+        }
+
+        private void BtnRestart_Click(object sender, EventArgs e)
+        {
+            InitializeGame(startTimer: false);
+            btnStart.Enabled = true;
+            btnRestart.Enabled = false;
         }
 
         private void ConfigureTimers()
         {
             if (timer1 != null)
             {
-                // evitar múltiples suscripciones si ConfigureTimers se llama otra vez
                 timer1.Tick -= Timer1_Tick;
-                timer1.Interval = 1000; // segundos transcurridos
+                timer1.Interval = 1000;
                 timer1.Tick += Timer1_Tick;
             }
 
             if (timer2 != null)
             {
                 timer2.Tick -= Timer2_Tick;
-                timer2.Interval = 700; // delay para ocultar pareja incorrecta
+                timer2.Interval = 700;
                 timer2.Tick += Timer2_Tick;
             }
         }
 
-        private void InitializeGame()
+        private void InitializeGame(bool startTimer = true)
         {
-            // Detener timers mientras se reinicia
             if (timer1 != null) timer1.Stop();
             if (timer2 != null) timer2.Stop();
 
-            // Lista de iconos (18 diferentes para 6x6). Se usan emojis para no necesitar recursos externos.
             var baseIcons = new List<string>
-            {
-                "🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨",
-                "🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐢"
-            };
+                        {
+                            "🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨",
+                            "🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐢"
+                        };
 
-            // Duplicar y mezclar usando Fisher-Yates para mayor aleatoriedad
             var icons = baseIcons.Concat(baseIcons).ToList();
             Shuffle(icons);
 
-            // Limpiar panel y listas
             plMemorama.Controls.Clear();
             cards.Clear();
 
-            // Crear botones (cartas)
             for (int r = 0; r < rows; r++)
             {
                 for (int c = 0; c < cols; c++)
@@ -77,7 +92,6 @@ namespace Memorama
                     var btn = new Button
                     {
                         Tag = icons[index],
-                        // Usar fuente con mejor soporte de emojis si está disponible
                         Font = new Font("Segoe UI Emoji", 22F, FontStyle.Regular, GraphicsUnit.Point),
                         BackColor = Color.LightGray,
                         ForeColor = Color.Black,
@@ -92,7 +106,6 @@ namespace Memorama
 
             LayoutCards();
 
-            // reiniciar estado
             matchesFound = 0;
             secondsElapsed = 0;
             lbPuntos.Text = $"Puntos: {matchesFound}";
@@ -100,10 +113,9 @@ namespace Memorama
             firstClicked = null;
             secondClicked = null;
 
-            if (timer1 != null) timer1.Start();
+            if (startTimer && timer1 != null) timer1.Start();
         }
 
-        // Fisher-Yates shuffle
         private void Shuffle<T>(IList<T> list)
         {
             var rnd = new Random();
@@ -137,15 +149,14 @@ namespace Memorama
 
         private void Card_Click(object sender, EventArgs e)
         {
-            // si estamos esperando a ocultar por mismatch, bloquear clicks
             if (timer2 != null && timer2.Enabled) return;
 
             var clicked = sender as Button;
             if (clicked == null) return;
             if (clicked == firstClicked) return;
-            if (!string.IsNullOrEmpty(clicked.Text)) return; // ya descubierta
+            if (!string.IsNullOrEmpty(clicked.Text)) return;
 
-            ShowIcon(clicked);
+            RevealCard(clicked);
 
             if (firstClicked == null)
             {
@@ -177,7 +188,7 @@ namespace Memorama
             }
         }
 
-        private void ShowIcon(Button btn)
+        private void RevealCard(Button btn)
         {
             if (btn == null) return;
             btn.Text = btn.Tag?.ToString() ?? string.Empty;
@@ -213,25 +224,80 @@ namespace Memorama
 
             MessageBox.Show($"¡Ganaste! Puntos: {matchesFound} - Tiempo: {secondsElapsed}s", "Victoria", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-            // Comprobar récord: menor tiempo
-            if (secondsElapsed < bestTime)
+            var podiumIsFull = podium.Count >= podiumLimit;
+            int worstOnPodium = podiumIsFull ? podium.Max(p => p.time) : int.MaxValue;
+
+            if (secondsElapsed < worstOnPodium || !podiumIsFull)
             {
-                string nombre;
-                try
-                {
-                    nombre = Interaction.InputBox("Has batido el récord. Introduce tu nombre:", "Nuevo récord", "Jugador");
-                }
-                catch
-                {
+                string nombre = PromptForName("Introduce tu nombre para el podio:", "Nuevo récord");
+                if (string.IsNullOrWhiteSpace(nombre))
                     nombre = "Jugador";
-                }
+
+                AddToPodio(nombre, secondsElapsed);
+                UpdatePodioListBox();
             }
 
-            // Reiniciar o crear nuevo juego
+            if (podium.Count > 0)
+                bestTime = podium.Min(p => p.time);
+            else
+                bestTime = int.MaxValue;
+
             var result = MessageBox.Show("¿Jugar de nuevo?", "Nuevo juego", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (result == DialogResult.Yes)
             {
-                InitializeGame();
+                InitializeGame(startTimer: false);
+                btnStart.Enabled = true;
+                btnRestart.Enabled = false;
+            }
+            else
+            {
+                btnStart.Enabled = true;
+                btnRestart.Enabled = false;
+            }
+        }
+
+        private void AddToPodio(string name, int time)
+        {
+            podium.Add((name, time));
+            podium = podium.OrderBy(p => p.time).Take(podiumLimit).ToList();
+        }
+
+        private void UpdatePodioListBox()
+        {
+            lbxPodio.Items.Clear();
+            for (int i = 0; i < podium.Count; i++)
+            {
+                var entry = podium[i];
+                lbxPodio.Items.Add($"{i + 1}º {entry.name} - {entry.time}s");
+            }
+        }
+
+        private string PromptForName(string promptText, string caption)
+        {
+            using (var form = new Form())
+            {
+                form.Text = caption;
+                form.FormBorderStyle = FormBorderStyle.FixedDialog;
+                form.StartPosition = FormStartPosition.CenterParent;
+                form.ClientSize = new Size(320, 110);
+                form.MinimizeBox = false;
+                form.MaximizeBox = false;
+                form.ShowIcon = false;
+                form.ShowInTaskbar = false;
+
+                var lbl = new Label() { Left = 10, Top = 10, AutoSize = true, Text = promptText };
+                var txt = new TextBox() { Left = 10, Top = lbl.Bottom + 8, Width = form.ClientSize.Width - 20 };
+                var ok = new Button() { Text = "Aceptar", DialogResult = DialogResult.OK, Left = form.ClientSize.Width - 180, Width = 80, Top = txt.Bottom + 10 };
+                var cancel = new Button() { Text = "Cancelar", DialogResult = DialogResult.Cancel, Left = form.ClientSize.Width - 90, Width = 80, Top = txt.Bottom + 10 };
+
+                form.Controls.AddRange(new Control[] { lbl, txt, ok, cancel });
+                form.AcceptButton = ok;
+                form.CancelButton = cancel;
+
+                var result = form.ShowDialog(this);
+                if (result == DialogResult.OK)
+                    return txt.Text.Trim();
+                return string.Empty;
             }
         }
     }
